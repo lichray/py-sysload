@@ -1,0 +1,48 @@
+py-sysload
+==========
+
+Description
+-----------
+
+py-sysload gets uptime, cpu, memory, swap usage information for UNIX-like
+systems. The main goal is to support Linux, FreeBSD, OpenBSD, and NetBSD.
+
+The module sysload provides 3 functions:
+
+::
+
+	uptime() -> int(sec)
+		Returns the seconds passed from the boot time to now.
+
+	cpuload() -> (used, total)
+		Returns the used and total CPU frequency in Hz.
+
+	memswap() -> (mused, mtotal, sused, stotal)
+		Returns the memory usage and swap usage in KB.
+
+In addition, sysload provides 2 helper functions to access the ``sysctl(3)``:
+
+::
+
+	sysctl(mib_t, c_type=None) -> str or c_type
+	sysctlbyname(name, c_type=None) -> str or c_type
+
+Examples
+--------
+
+	::
+
+		>>> import sysload
+		>>> sysload.sysctl((1, 1))                 # OS name
+		'FreeBSD'
+		>>> sysload.sysctl((1, 3), sysload.c_int)  # OS revision
+		199506
+		>>> sysload.sysctlbyname('kern.hostname')
+		'compaq.yuetime'
+		>>> sysload.sysctlbyname('security.bsd.see_other_uids', sysload.c_int)
+		0
+
+Bugs
+----
+	Currently, only Linux and FreeBSD are fully supported. Supports to other
+	BSDs require further implementation.
