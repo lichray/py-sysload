@@ -60,7 +60,7 @@ class timeval(Structure):
 def uptime():
     try:
         with open('/proc/uptime') as f:
-            return int(f.read().split()[0])
+            return int(float(f.read().split()[0]))
     except IOError:
         return int(time()) - sysctl((CTL_KERN, KERN_BOOTTIME), timeval).sec
 
