@@ -18,8 +18,12 @@ from time import time
 from inspect import isclass
 from contextlib import contextmanager
 from warnings import warn
-import os, sys
+import os, platform
 import re
+if platform.architecture()[0] == '64bit':
+    ARCH_64 = 1
+else:
+    ARCH_64 = 0
 
 __all__ = 'uptime cpuload memswap sysctl sysctlbyname libc'.split()
 
@@ -51,8 +55,12 @@ class kvm_swap(Structure):
 #endif
 
 class timeval(Structure):
-    _fields_ = [("sec", c_int64),
-                ("usec", c_long)]
+    if ARCH_64:
+        _fields_ = [("sec", c_int64),
+                    ("usec", c_long)]
+    else:
+        _fields_ = [("sec", c_int32),
+                    ("usec", c_long)]
 
 def uptime():
 #if defined(__linux__)
@@ -108,9 +116,9 @@ def memswap():
             else: pass
             if vlen > 5: break
 #else
-    psize = libc.getpagesize()
     def cvt(v): return v * psize / 1024
 #if defined(__FreeBSD__)
+    psize = libc.getpagesize()
     mtotal = cvt(
             sysctlbyname('vm.stats.vm.v_page_count', c_int))
     mused = mtotal - cvt(
@@ -124,8 +132,12 @@ def memswap():
             if libkvm.kvm_getswapinfo(kd, swap, 1, 0) == 0:
                 stotal = cvt(swap[0].total)
                 sused = cvt(swap[0].used)
-#else
-#error "Your platform is not yet support"
+#elif defined(__NetBSD__)
+    psize = sysctl((CTL_HW, HW_PAGESIZE), c_int)
+    if ARCH_64:
+        mtotal = sysctl((CTL_HW, HW_PHYSMEM64), c_ulong)
+    else:
+        mtotal = sysctl((CTL_HW, HW_PHYSMEM), c_ulong)
 #endif
 #endif
     return mused, mtotal, sused, stotal
