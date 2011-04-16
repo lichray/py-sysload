@@ -32,14 +32,15 @@ Examples
 
 	::
 
-		>>> import sysload
-		>>> sysload.sysctl((1, 1))                 # OS name
+		>>> from sysload import *
+		>>> import ctypes
+		>>> sysctl((1, 1))                # OS name
 		'FreeBSD'
-		>>> sysload.sysctl((1, 3), sysload.c_int)  # OS revision
+		>>> sysctl((1, 3), ctypes.c_int)  # OS revision
 		199506
-		>>> sysload.sysctlbyname('kern.hostname')
+		>>> sysctlbyname('kern.hostname')
 		'compaq.yuetime'
-		>>> sysload.sysctlbyname('security.bsd.see_other_uids', sysload.c_int)
+		>>> sysctlbyname('security.bsd.see_other_uids', ctypes.c_int)
 		0
 
 Bugs
