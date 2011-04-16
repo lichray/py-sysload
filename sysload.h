@@ -32,92 +32,103 @@ except TypeError:
     def get_errno():
         return libc.__errno_location().contents.value
 
-if sys.platform.startswith('freebsd'):
-    libkvm = CDLL('libkvm.so')
-    libkvm.kvm_open.restype = c_void_p
+#if defined(__FreeBSD__)
+libkvm = CDLL('libkvm.so')
+libkvm.kvm_open.restype = c_void_p
 
-    @contextmanager
-    def kvm_open():
-        kd = cast(libkvm.kvm_open('/dev/null', '/dev/null', 
-                '/dev/null', os.O_RDONLY, 'kvm_open'), c_void_p)
-        yield kd
-        libkvm.kvm_close(kd)
+@contextmanager
+def kvm_open():
+    kd = cast(libkvm.kvm_open('/dev/null', '/dev/null', 
+            '/dev/null', os.O_RDONLY, 'kvm_open'), c_void_p)
+    yield kd
+    libkvm.kvm_close(kd)
 
-    class kvm_swap(Structure):
-        _fields_ = [("devname", c_char * 32),
-                    ("used", c_int),
-                    ("total", c_int),
-                    ("flags", c_int)]
+class kvm_swap(Structure):
+    _fields_ = [("devname", c_char * 32),
+                ("used", c_int),
+                ("total", c_int),
+                ("flags", c_int)]
+#endif
 
 class timeval(Structure):
     _fields_ = [("sec", c_int64),
                 ("usec", c_long)]
 
 def uptime():
-    try:
-        with open('/proc/uptime') as f:
-            return int(float(f.read().split()[0]))
-    except IOError:
-        return int(time()) - sysctl((CTL_KERN, KERN_BOOTTIME), timeval).sec
+#if defined(__linux__)
+    with open('/proc/uptime') as f:
+        return int(float(f.read().split()[0]))
+#elif defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+    return int(time()) - sysctl((CTL_KERN, KERN_BOOTTIME), timeval).sec
+#endif
 
 def cpuload():
-    try:
-        with open('/proc/stat') as f:
-            l = map(int, f.readline().split()[1:])
-            l.extend([0] * (8-len(l)))
-        total = sum(l)
-        used = total - (sum(l[3:5]))
-    except IOError:
-        l = sysctlbyname('kern.cp_time', c_long * 5)
-        total = sum(l)
-        used = total - l[4]
+#if defined(__linux__)
+    with open('/proc/stat') as f:
+        l = map(int, f.readline().split()[1:])
+        l.extend([0] * (8-len(l)))
+    total = sum(l)
+    used = total - (sum(l[3:5]))
+#else
+#if defined(__FreeBSD__)
+    l = sysctlbyname('kern.cp_time', c_long * 5)
+#elif defined(__NetBSD__)
+	l = sysctl((CTL_KERN, KERN_CP_TIME), c_long * 5)
+#elif defined(__OpenBSD__)
+	l = sysctl((CTL_KERN, KERN_CPTIME), c_long * 5)
+#endif
+    total = sum(l)
+    used = total - l[4]
+#endif
     return used, total
 
 def memswap():
     mtotal, mused, stotal, sused = [0] * 4
-    try:
-        with open('/proc/meminfo') as f:
-            vlen = 0
-            for l in f.readlines():
-                m = re.match(r'(\w+):\s*(\d+)', l)
-                if not m: continue
-                k, v = m.groups()
-                if k == 'MemTotal':
-                    mtotal = int(v)
-                    mused += mtotal
-                    vlen += 1
-                elif k in ('MemFree', 'Buffers', 'Cached'):
-                    mused -= int(v)
-                    vlen += 1
-                elif k == 'SwapTotal':
-                    stotal = int(v)
-                    sused += stotal
-                    vlen += 1
-                elif k == 'SwapFree':
-                    sused -= int(v)
-                    vlen += 1
-                else: pass
-                if vlen > 5: break
-        return mused, mtotal, sused, stotal
-    except IOError:
-        psize = libc.getpagesize()
-        def cvt(v): return v * psize / 1024
-        /* freebsd only */
-        if sys.platform.startswith('freebsd'):
-            mtotal = cvt(
-                    sysctlbyname('vm.stats.vm.v_page_count', c_int))
-            mused = mtotal - cvt(
-                    sysctlbyname('vm.stats.vm.v_free_count', c_int) +
-                    sysctlbyname('vm.stats.vm.v_inactive_count', c_int))
-            with kvm_open() as kd:
-                if kd.value == None:
-                    warn('kvm_open() failed')
-                else:
-                    swap = (kvm_swap * 1)()
-                    if libkvm.kvm_getswapinfo(kd, swap, 1, 0) == 0:
-                        stotal = cvt(swap[0].total)
-                        sused = cvt(swap[0].used)
-        return mused, mtotal, sused, stotal
+#if defined(__linux__)
+    with open('/proc/meminfo') as f:
+        vlen = 0
+        for l in f.readlines():
+            m = re.match(r'(\w+):\s*(\d+)', l)
+            if not m: continue
+            k, v = m.groups()
+            if k == 'MemTotal':
+                mtotal = int(v)
+                mused += mtotal
+                vlen += 1
+            elif k in ('MemFree', 'Buffers', 'Cached'):
+                mused -= int(v)
+                vlen += 1
+            elif k == 'SwapTotal':
+                stotal = int(v)
+                sused += stotal
+                vlen += 1
+            elif k == 'SwapFree':
+                sused -= int(v)
+                vlen += 1
+            else: pass
+            if vlen > 5: break
+#else
+    psize = libc.getpagesize()
+    def cvt(v): return v * psize / 1024
+#if defined(__FreeBSD__)
+    mtotal = cvt(
+            sysctlbyname('vm.stats.vm.v_page_count', c_int))
+    mused = mtotal - cvt(
+            sysctlbyname('vm.stats.vm.v_free_count', c_int) +
+            sysctlbyname('vm.stats.vm.v_inactive_count', c_int))
+    with kvm_open() as kd:
+        if kd.value == None:
+            warn('kvm_open() failed')
+        else:
+            swap = (kvm_swap * 1)()
+            if libkvm.kvm_getswapinfo(kd, swap, 1, 0) == 0:
+                stotal = cvt(swap[0].total)
+                sused = cvt(swap[0].used)
+#else
+#error "Your platform is not yet support"
+#endif
+#endif
+    return mused, mtotal, sused, stotal
 
 def sysctl(mib_t, c_type=None):
     mib = (c_int * len(mib_t))()
