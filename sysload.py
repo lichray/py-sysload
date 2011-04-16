@@ -17,7 +17,7 @@ from time import time
 from inspect import isclass
 from contextlib import contextmanager
 from warnings import warn
-import os, sys
+import os, platform
 import re
 
 __all__ = 'uptime cpuload memswap sysctl sysctlbyname libc'.split()
@@ -31,7 +31,7 @@ except TypeError:
     def get_errno():
         return libc.__errno_location().contents.value
 
-if sys.platform.startswith('freebsd'):
+if platform.system() == 'FreeBSD':
     libkvm = CDLL('libkvm.so')
     libkvm.kvm_open.restype = c_void_p
 
@@ -54,8 +54,12 @@ CTL_VM        = 2
 KERN_BOOTTIME = 21
 
 class timeval(Structure):
-    _fields_ = [("sec", c_int64),
-                ("usec", c_long)]
+    if platform.architecture()[0] == '64bit':
+        _fields_ = [("sec", c_int64),
+                    ("usec", c_long)]
+    else:
+        _fields_ = [("sec", c_int32),
+                    ("usec", c_long)]
 
 def uptime():
     try:
@@ -107,7 +111,7 @@ def memswap():
         psize = libc.getpagesize()
         def CONVERT(v): return v * psize / 1024
         # freebsd only
-        if sys.platform.startswith('freebsd'):
+        if platform.system() == 'FreeBSD':
             mtotal = CONVERT(
                     sysctlbyname('vm.stats.vm.v_page_count', c_int))
             mused = mtotal - CONVERT(
