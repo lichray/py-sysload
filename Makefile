@@ -4,7 +4,8 @@ CPPFLAGS = -w
 all : sysload.py
 
 sysload.py : sysload.h
-	$(CPP) $(CPPFLAGS) -E sysload.h | grep -v '^struct \|;$$' > sysload.py
+	${CPP} ${CPPFLAGS} -E sysload.h | \
+		grep -v -E '^struct |^typedef |;$$' > sysload.py
 
 doc : README.html
 

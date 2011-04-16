@@ -7,8 +7,9 @@
 
     :copyright: (c) 2011 by Zhihao Yuan.
     :license: 2-clause BSD License.
-    :version: 0.1a
+    :version: 0.2a
 """
+#include <sys/sysctl.h>
 
 from __future__ import with_statement
 from ctypes import *
@@ -27,7 +28,7 @@ try:
 except TypeError:
     libc = CDLL(find_library('c'))
     libc.__errno_location.restype = POINTER(c_int)
-    # linux2 only
+    /* linux2 only */
     def get_errno():
         return libc.__errno_location().contents.value
 
@@ -47,11 +48,6 @@ if sys.platform.startswith('freebsd'):
                     ("used", c_int),
                     ("total", c_int),
                     ("flags", c_int)]
-
-CTL_KERN      = 1
-CTL_VM        = 2
-# FIXME may not be portable
-KERN_BOOTTIME = 21
 
 class timeval(Structure):
     _fields_ = [("sec", c_int64),
@@ -105,12 +101,12 @@ def memswap():
         return mused, mtotal, sused, stotal
     except IOError:
         psize = libc.getpagesize()
-        def CONVERT(v): return v * psize / 1024
-        # freebsd only
+        def cvt(v): return v * psize / 1024
+        /* freebsd only */
         if sys.platform.startswith('freebsd'):
-            mtotal = CONVERT(
+            mtotal = cvt(
                     sysctlbyname('vm.stats.vm.v_page_count', c_int))
-            mused = mtotal - CONVERT(
+            mused = mtotal - cvt(
                     sysctlbyname('vm.stats.vm.v_free_count', c_int) +
                     sysctlbyname('vm.stats.vm.v_inactive_count', c_int))
             with kvm_open() as kd:
@@ -119,8 +115,8 @@ def memswap():
                 else:
                     swap = (kvm_swap * 1)()
                     if libkvm.kvm_getswapinfo(kd, swap, 1, 0) == 0:
-                        stotal = CONVERT(swap[0].total)
-                        sused = CONVERT(swap[0].used)
+                        stotal = cvt(swap[0].total)
+                        sused = cvt(swap[0].used)
         return mused, mtotal, sused, stotal
 
 def sysctl(mib_t, c_type=None):
