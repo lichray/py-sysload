@@ -31,6 +31,13 @@ except TypeError:
     def get_errno():
         return libc.__errno_location().contents.value
 
+PROCFS = 0
+try:
+    with open('/proc/mounts') as f:
+        if re.search('^proc', f.read(), re.MULTILINE):
+            PROCFS = 1
+except: pass
+
 if platform.system() == 'FreeBSD':
     libkvm = CDLL('libkvm.so')
     libkvm.kvm_open.restype = c_void_p
@@ -62,20 +69,20 @@ class timeval(Structure):
                     ("usec", c_long)]
 
 def uptime():
-    try:
+    if PROCFS:
         with open('/proc/uptime') as f:
             return int(float(f.read().split()[0]))
-    except IOError:
+    else:
         return int(time()) - sysctl((CTL_KERN, KERN_BOOTTIME), timeval).sec
 
 def cpuload():
-    try:
+    if PROCFS:
         with open('/proc/stat') as f:
             l = map(int, f.readline().split()[1:])
             l.extend([0] * (8-len(l)))
         total = sum(l)
         used = total - (sum(l[3:5]))
-    except IOError:
+    else:
         l = sysctlbyname('kern.cp_time', c_long * 5)
         total = sum(l)
         used = total - l[4]
@@ -83,7 +90,7 @@ def cpuload():
 
 def memswap():
     mtotal, mused, stotal, sused = [0] * 4
-    try:
+    if PROCFS:
         with open('/proc/meminfo') as f:
             vlen = 0
             for l in f.readlines():
@@ -107,7 +114,7 @@ def memswap():
                 else: pass
                 if vlen > 5: break
         return mused, mtotal, sused, stotal
-    except IOError:
+    else:
         psize = libc.getpagesize()
         def CONVERT(v): return v * psize / 1024
         # freebsd only
