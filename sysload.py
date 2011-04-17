@@ -34,7 +34,7 @@ except TypeError:
 PROCFS = 0
 try:
     with open('/proc/mounts') as f:
-        if re.search('^proc', f.read(), re.MULTILINE):
+        if re.search(r'\bproc\b', f.read()):
             PROCFS = 1
 except: pass
 
