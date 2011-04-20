@@ -7,7 +7,7 @@
 
     :copyright: (c) 2011 by Zhihao Yuan.
     :license: 2-clause BSD License.
-    :version: 0.1a
+    :version: 0.1b
 """
 
 from __future__ import with_statement
@@ -39,21 +39,34 @@ try:
 except: pass
 
 if platform.system() == 'FreeBSD':
-    libkvm = CDLL('libkvm.so')
-    libkvm.kvm_open.restype = c_void_p
+    class kvm(object):
+        __obj = None
+        __lib = CDLL('libkvm.so')
+        __lib.kvm_open.restype = c_void_p
 
-    @contextmanager
-    def kvm_open():
-        kd = cast(libkvm.kvm_open('/dev/null', '/dev/null', 
-                '/dev/null', os.O_RDONLY, 'kvm_open'), c_void_p)
-        yield kd
-        libkvm.kvm_close(kd)
+        class swap(Structure):
+            _fields_ = [("devname", c_char * 32),
+                        ("used", c_int),
+                        ("total", c_int),
+                        ("flags", c_int)]
 
-    class kvm_swap(Structure):
-        _fields_ = [("devname", c_char * 32),
-                    ("used", c_int),
-                    ("total", c_int),
-                    ("flags", c_int)]
+        def __new__(cls):
+            if not cls.__obj:
+                cls.__obj = super(kvm, cls).__new__(cls)
+                cls.__obj.__kd = cast(cls.__lib.kvm_open(
+                    '/dev/null', '/dev/null', '/dev/null',
+                    os.O_RDONLY, 'kvm_open'), c_void_p)
+                if cls.__obj.__kd.value == None:
+                    raise LibError('kvm_open() failed')
+                else:
+                    cls.__obj.__swap = (cls.swap * 1)()
+            return cls.__obj
+
+        def getswapinfo(self):
+            if self.__lib.kvm_getswapinfo(
+                    self.__kd, self.__swap, 1, 0) == 0:
+                return self.__swap[0]
+
 
 CTL_KERN      = 1
 CTL_VM        = 2
@@ -124,14 +137,14 @@ def memswap():
             mused = mtotal - CONVERT(
                     sysctlbyname('vm.stats.vm.v_free_count', c_int) +
                     sysctlbyname('vm.stats.vm.v_inactive_count', c_int))
-            with kvm_open() as kd:
-                if kd.value == None:
-                    warn('kvm_open() failed')
-                else:
-                    swap = (kvm_swap * 1)()
-                    if libkvm.kvm_getswapinfo(kd, swap, 1, 0) == 0:
-                        stotal = CONVERT(swap[0].total)
-                        sused = CONVERT(swap[0].used)
+            try:
+                kd = kvm()
+            except LibError, e:
+                warn(e.strerror)
+            swapinfo = kd.getswapinfo()
+            if swapinfo:
+                stotal = CONVERT(swapinfo.total)
+                sused = CONVERT(swapinfo.used)
         return mused, mtotal, sused, stotal
 
 def sysctl(mib_t, c_type=None):
